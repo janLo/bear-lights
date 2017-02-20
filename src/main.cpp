@@ -19,6 +19,11 @@
 
 //#define SERIAL_OUT
 #define SIMPLE_RGB
+#define FANCY_RGB
+
+#ifdef FANCY_RGB
+#include "Adafruit_NeoPixel.h"
+#endif
 
 // Our Global Sample Rate, 5000hz
 #define SAMPLEPERIODUS 200
@@ -31,7 +36,7 @@
 #define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
 #endif
 
-#ifdef SIMPLE_RGB
+#if defined(SIMPLE_RGB) || defined(FANCY_RGB)
 uint8_t r[] = {0x19, 0x21, 0x29, 0x32, 0x3b, 0x44, 0x4b, 0x54, 0x5d, 0x65, 0x6e,
                0x77, 0x88, 0x9d, 0xb2, 0xc7, 0xda, 0xde, 0xe2, 0xe6, 0xeb, 0xed,
                0xef, 0xf1, 0xf2, 0xf4, 0xf6, 0xf7, 0xf9, 0xfa, 0xfc, 0xff};
@@ -41,6 +46,38 @@ uint8_t g[] = {0xa9, 0xac, 0xae, 0xb1, 0xb3, 0xb5, 0xb7, 0xbb, 0xbd, 0xc0, 0xc2,
 uint8_t b[] = {0x15, 0x15, 0x14, 0x13, 0x13, 0x12, 0x12, 0x11, 0x10, 0x10, 0x0f,
                0x0f, 0x0e, 0x0c, 0x0b, 0x0a, 0x0a, 0x19, 0x26, 0x34, 0x44, 0x4d,
                0x52, 0x58, 0x5e, 0x63, 0x69, 0x6e, 0x74, 0x7a, 0x7f, 0x85};
+#endif
+
+#ifdef FANCY_RGB
+
+#define RED 0xFF0000
+#define GREEN 0x00FF00
+#define BLUE 0x0000FF
+#define YELLOW 0xFFFF00
+#define PINK 0xFF1088
+#define ORANGE 0xE05800
+#define WHITE 0xFFFFFF
+#define BLACK 0x000000
+
+#define PIN 13 // Datapin
+#define NOLEDS 22
+
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NOLEDS, PIN, NEO_GRB + NEO_KHZ800);
+const int SHOWDELAY_MIRCO =
+    (NOLEDS * 8 * 20 / 16) + 200; // 20Cycles per bit @ 16MHz & 800kHz
+
+void ShowLed() {
+  strip.show();
+  delayMicroseconds(SHOWDELAY_MIRCO);
+}
+
+void colorWipe(uint32_t color) {
+  for (int i = 0; i < NOLEDS; i++) {
+    strip.setPixelColor(i, color);
+  }
+  ShowLed();
+}
+
 #endif
 
 void setup() {
@@ -58,6 +95,17 @@ void setup() {
 #ifdef SERIAL_OUT
   Serial.begin(115200);
   Serial.println("Start");
+#endif
+
+#ifdef FANCY_RGB
+  strip.begin();
+
+  // Initialize all pixels to 'off'
+  colorWipe(PINK);
+  delay(100);
+  colorWipe(ORANGE);
+  delay(100);
+  colorWipe(BLACK);
 #endif
 }
 
@@ -100,10 +148,14 @@ void loop() {
   float sample, value, envelope, beat, thresh;
   unsigned char i;
 
-#ifdef SIMPLE_RGB
+#if defined(SIMPLE_RGB) || defined(FANCY_RGB)
   float max = 0.0f;
   int16_t rr, gg, bb;
+#endif
 
+#ifdef FANCY_RGB
+  uint32_t colors[NOLEDS];
+  memset(colors, 0, sizeof(uint32_t) * NOLEDS);
 #endif
 
   for (i = 0;; ++i) {
@@ -130,12 +182,10 @@ void loop() {
       if (beat > thresh) {
         digitalWrite(2, HIGH);
 
-#ifdef SIMPLE_RGB
+#if defined(SIMPLE_RGB) || defined(FANCY_RGB)
         max = max(max, beat);
         uint8_t val = round(((beat - thresh) / (max - thresh)) * 32);
-#endif
 
-#ifdef SIMPLE_RGB
         max = max * 0.9f;
 
         rr = min(255, r[val] + 30);
@@ -143,10 +193,13 @@ void loop() {
         bb = min(255, b[val] + 20);
 #endif
 
+#ifdef FANCY_RGB
+#endif
+
       } else {
         digitalWrite(2, LOW);
 
-#ifdef SIMPLE_RGB
+#if defined(SIMPLE_RGB) || defined(FANCY_RGB)
         rr = max(0, rr - 20);
         gg = max(0, gg - 20);
         bb = max(0, bb - 20);
@@ -157,6 +210,10 @@ void loop() {
       analogWrite(9, rr);
       analogWrite(10, gg);
       analogWrite(11, bb);
+#endif
+
+#ifdef FANCY_RGB
+      colorWipe((((uint32_t)rr) << 16) | (gg << 8) | bb);
 #endif
 
       // Reset sample counter
