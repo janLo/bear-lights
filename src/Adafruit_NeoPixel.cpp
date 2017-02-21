@@ -496,6 +496,27 @@ uint32_t Adafruit_NeoPixel::Color(uint8_t r, uint8_t g, uint8_t b) {
 //return ((uint32_t)r << 16) | ((uint32_t)g <<  8) | b;
 }
 
+
+void Adafruit_NeoPixel::shiftPixels(uint16_t start, size_t len, size_t step, uint8_t dir) {
+  if (dir == SHIFT_FORWARD) {
+    if (start < numLEDs && (start + len) < numLEDs && (start + step) < numLEDs) {
+      uint8_t *source = &pixels[start * 3];
+      uint8_t *target =  &pixels[(start + step) * 3];
+      size_t new_len = min(numLEDs - start - step, len);
+
+      memmove(target, source, new_len* 3);
+    }
+  } else {
+    if (start < numLEDs && (start + len) < numLEDs && (start - step) >= 0) {
+      uint8_t new_start = max(start, step);
+      uint8_t *source = &pixels[new_start * 3];
+      uint8_t *target =  &pixels[(new_start - step) * 3];
+
+      memmove(target, source, len * 3);
+    }
+  }
+}
+
 // Query color from previously-set pixel (returns packed 32-bit RGB value)
 uint32_t Adafruit_NeoPixel::getPixelColor(uint16_t n) {
 

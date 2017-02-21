@@ -30,6 +30,9 @@
 #define NEO_KHZ800  0x02 // 800 KHz datastream
 #define NEO_SPDMASK 0x02
 
+#define SHIFT_FORWARD 0
+#define SHIFT_BACKWARD 1
+
 class Adafruit_NeoPixel {
 
  public:
@@ -41,7 +44,8 @@ class Adafruit_NeoPixel {
     begin(void),
     show(void),
     setPixelColor(uint16_t n, uint8_t r, uint8_t g, uint8_t b),
-    setPixelColor(uint16_t n, uint32_t c);
+    setPixelColor(uint16_t n, uint32_t c),
+    shiftPixels(uint16_t start, size_t len, size_t step, uint8_t dir);
   uint16_t
     numPixels(void);
   uint32_t
