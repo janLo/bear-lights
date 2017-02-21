@@ -17,8 +17,8 @@
 
 #include <Arduino.h>
 
-//#define SERIAL_OUT
-#define SIMPLE_RGB
+#define SERIAL_OUT
+//#define SIMPLE_RGB
 #define FANCY_RGB
 
 #ifdef FANCY_RGB
@@ -60,7 +60,10 @@ uint8_t b[] = {0x15, 0x15, 0x14, 0x13, 0x13, 0x12, 0x12, 0x11, 0x10, 0x10, 0x0f,
 #define BLACK 0x000000
 
 #define PIN 13 // Datapin
-#define NOLEDS 22
+#define NOLEDS 12
+
+
+uint8_t bright = 1;
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NOLEDS, PIN, NEO_GRB + NEO_KHZ800);
 const int SHOWDELAY_MIRCO =
@@ -68,12 +71,16 @@ const int SHOWDELAY_MIRCO =
 
 void ShowLed() {
   strip.show();
-  delayMicroseconds(SHOWDELAY_MIRCO);
+  //delayMicroseconds(SHOWDELAY_MIRCO);
 }
 
 void colorWipe(uint32_t color) {
   for (int i = 0; i < NOLEDS; i++) {
-    strip.setPixelColor(i, color);
+    //strip.setPixelColor(i, color);
+    strip.setPixelColor(i,
+      ((color >> 16) & 0xff) >> bright,
+      ((color >> 8) & 0xff) >> bright,
+      (color & 0xff) >> bright);
   }
   ShowLed();
 }
@@ -101,6 +108,8 @@ void setup() {
   strip.begin();
 
   // Initialize all pixels to 'off'
+  colorWipe(BLUE);
+  delay(100);
   colorWipe(PINK);
   delay(100);
   colorWipe(ORANGE);
@@ -151,14 +160,82 @@ void loop() {
 #if defined(SIMPLE_RGB) || defined(FANCY_RGB)
   float max = 0.0f;
   int16_t rr, gg, bb;
+  uint8_t fancy_type = 0;
+  uint16_t fancy_reading = 0;
+  uint8_t float_state = 0;
+  uint16_t last_scoll = 0;
+  uint8_t selected_bright = 1;
+  uint16_t max_bright_time = 0;
 #endif
 
-#ifdef FANCY_RGB
-  uint32_t colors[NOLEDS];
-  memset(colors, 0, sizeof(uint32_t) * NOLEDS);
-#endif
 
   for (i = 0;; ++i) {
+
+#ifdef FANCY_RGB
+    uint16_t current = millis();
+
+    // Dimm every 10000 ms if brightest mode to save step up converter
+    if (selected_bright == 0) {
+      if (max_bright_time + 10000 < current || max_bright_time > current) {
+        bright = (bright != selected_bright ? selected_bright : bright + 1);
+        max_bright_time = current;
+      }
+    }
+
+    if (digitalRead(3) != 0) {
+      if (fancy_reading + 1000 < current || fancy_reading > current) {
+        fancy_type = (fancy_type + 1) % (2+6+4);
+        fancy_reading = current;
+      }
+    }
+    if (digitalRead(4)) {
+      if (fancy_reading + 1000 < current || fancy_reading > current) {
+        selected_bright = ((bright + 1) % 4);
+        bright = selected_bright;
+        fancy_reading = millis();
+      }
+    }
+
+    if (fancy_type > 1) {
+      if (fancy_type <= 7) {
+        switch (fancy_type) {
+          case 2: colorWipe(RED); break;
+          case 3: colorWipe(GREEN); break;
+          case 4: colorWipe(BLUE); break;
+          case 5: colorWipe(PINK); break;
+          case 6: colorWipe(ORANGE); break;
+          case 7: colorWipe(WHITE); break;
+        }
+        delay(100);
+        continue;
+
+      } else if (fancy_type <= 11) {
+        uint32_t color = 0;
+        switch (fancy_type) {
+          case 8: color = PINK; break;
+          case 9: color = RED; break;
+          case 10: color = ORANGE; break;
+          case 11: color = 0x5555FF; break;
+        }
+
+        float_state = (float_state + 1) % 4;
+        uint8_t do_float = min(8, bright + float_state);
+        strip.shiftPixels(0, NOLEDS - 1 , 1, SHIFT_FORWARD);
+        //strip.shiftPixels(NOLEDS / 2, NOLEDS/2 , 1, SHIFT_FORWARD);
+        //strip.shiftPixels(1, NOLEDS/2 , 1, SHIFT_BACKWARD);
+
+        strip.setPixelColor(0,
+          ((color >> 16) & 0xff) >> do_float,
+          ((color >> 8) & 0xff) >> do_float,
+          (color & 0xff) >> do_float);
+        ShowLed();
+        delay(90);
+        continue;
+      }
+    }
+#endif
+
+
     // Read ADC and center so +-512
     sample = (float)analogRead(0) - 503.f;
 
@@ -172,6 +249,7 @@ void loop() {
 
     // Every 200 samples (25hz) filter the envelope
     if (i == 200) {
+
       // Filter out repeating bass sounds 100 - 180bpm
       beat = beatFilter(envelope);
 
@@ -187,33 +265,49 @@ void loop() {
         uint8_t val = round(((beat - thresh) / (max - thresh)) * 32);
 
         max = max * 0.9f;
-
-        rr = min(255, r[val] + 30);
-        gg = max(0, g[val] - 40);
-        bb = min(255, b[val] + 20);
-#endif
-
-#ifdef FANCY_RGB
+      /*  rr = min(255, r[val] + 30) >> bright;
+        gg = max(0, g[val] - 40) >> bright;
+        bb = min(255, b[val] + 20) >> bright;*/
+        rr =  r[val] >> bright;
+        gg =  g[val]  >> bright;
+        bb =  b[val] >> bright;
 #endif
 
       } else {
         digitalWrite(2, LOW);
 
 #if defined(SIMPLE_RGB) || defined(FANCY_RGB)
-        rr = max(0, rr - 20);
-        gg = max(0, gg - 20);
-        bb = max(0, bb - 20);
+//        if (rr > 0) rr = max(0, rr - 20);
+//        if (gg > 0) gg = max(0, gg - 20);
+//        if (bb > 0) bb = max(0, bb - 20);
+        //if (last_change + 80 < millis()) {
+          //last_change = millis();
+        //}
 #endif
       }
 
 #ifdef SIMPLE_RGB
-      analogWrite(9, rr);
-      analogWrite(10, gg);
-      analogWrite(11, bb);
+      analogWrite(10, rr);
+      analogWrite(12, gg);
+      analogWrite(12, bb);
 #endif
 
 #ifdef FANCY_RGB
-      colorWipe((((uint32_t)rr) << 16) | (gg << 8) | bb);
+      if (last_scoll + 50 < current || last_scoll > current) {
+        if (fancy_type == 1) {
+          colorWipe((((uint32_t)rr) << 16) | (gg << 8) | bb);
+          last_scoll = current;
+        } else {
+          strip.shiftPixels(0, NOLEDS - 1 , 1, SHIFT_FORWARD);
+          strip.setPixelColor(0, rr, gg, bb);
+          ShowLed();
+        }
+
+        rr = rr >> 1;
+        gg = gg >> 1;
+        bb = bb >> 1;
+        last_scoll = current;
+      }
 #endif
 
       // Reset sample counter
